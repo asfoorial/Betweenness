@@ -8,9 +8,10 @@ class Message (msgId:Int, msgDst:Int, lvl:Double, pathcount:Int, dir:EdgeDirecti
 	var messages:List[Message] = List[Message](this)
 	var dstId:Int = msgDst
 	var level:Double = lvl
+	var credit:Double = 0
 	var shortestPathCount:Int = pathcount
 	var isCancel:Boolean = false
 	var roots:List[Int] = null
-	override def toString() = "("+messageId+","+msgDst+","+level+","+","+shortestPathCount+","+direction+","+roots+")"
+	override def toString() = "(msgId="+messageId+", dst="+msgDst+",lvl="+level+",paths="+shortestPathCount+",credit="+credit+")"
 
 }

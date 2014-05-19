@@ -77,20 +77,20 @@ object BetweennessPregel extends App {
 	var graph = Graph(initialVertices, edges).cache
 	var root = 1
 	var msg = new Message(-1, 1, Double.PositiveInfinity, 0, EdgeDirection.Out)
-	msg.roots = List(1, 2)
+	msg.roots = List(1)
 	graph = graph.pregel(msg)(
 		(vid, vertex, message) => {
-			println("vid=" + vid + " node="+vertex+"; received msg: " + message)
+			println("vid=" + vid + " node=" + vertex + "; received msg: " + message)
 			var vdata = new VertexData(0, true)
 			message.messages.foreach(msg => {
 				if (msg.messageId == -1) {
 					msg.roots.foreach(i => {
 						vdata.levels += (i -> Double.PositiveInfinity)
 						vdata.shortestPaths += (i -> 0)
-						})
+					})
 					if (msg.roots.contains(vid.toInt))
 						vdata.levels(vid.toInt) = 0.0
-				} 
+				}
 				else {
 					vdata.levels = vertex.levels
 					vdata.levels(msg.messageId) = msg.level
@@ -115,6 +115,12 @@ object BetweennessPregel extends App {
 				//println("roots exist")
 
 				roots.keys.foreach(i => {
+					var src = triplet.srcAttr
+					var dst = triplet.dstAttr
+					if (src.levels(i) > dst.levels(i)) {
+						src = triplet.dstAttr
+						dst = triplet.srcAttr
+					}
 					var srcLevel = triplet.srcAttr.levels.getOrElse(i, Double.PositiveInfinity)
 					var dstLevel = triplet.dstAttr.levels.getOrElse(i, Double.PositiveInfinity)
 					var srcId = triplet.srcId
@@ -133,7 +139,7 @@ object BetweennessPregel extends App {
 							srcPathesCount = triplet.dstAttr.shortestPaths.getOrElse(i, 0)
 						}
 						var pathcount = srcPathesCount
-						if(pathcount == 0)
+						if (pathcount == 0)
 							pathcount = 1
 						var msg = new Message(i, dstId.toInt, srcLevel + 1, pathcount, EdgeDirection.Out)
 						println("sending msg from src=" + srcId + " (lvl=" + srcLevel + " to dstId=" + dstId + " (lvl=" + dstLevel + "; msg=" + msg)
@@ -153,8 +159,153 @@ object BetweennessPregel extends App {
 			} // Merge Message
 			)
 	println(graph.vertices.collect.mkString("\n"))
+	//Done with pass 1
+	/*
+	 * Now setup edges to handle a credit for every root. The credit is set to initial infinity!
+	 */
+	var newGraph = graph.mapEdges(e => {
+		var credits = scala.collection.mutable.Map[Int, Double]()
+		msg.roots.foreach(i => {
+			credits += (i -> Double.PositiveInfinity)
+		})
+	})
+	
+	/*
+	 * Maximum levels at each root
+	 */
+	var maxLevels = graph.vertices.map(v => v._2.levels).reduce((l1, l2) => {
+		var l3 = scala.collection.mutable.Map[Int, Double]()
+		l1.keys.foreach(i => {
+			l3 += (i -> Math.max(l1(i), l2(i)))
+		})
+		l3
+	})
 
+	var newVs = newGraph.triplets.map(t=>{
+		/*var roots = t.srcAttr.levels;
+		if (roots.size <= 0) {
+			roots = t.dstAttr.levels;
+		}
+		if (roots.size > 0) {
+
+			//println("roots exist")
+
+			roots.keys.foreach(i => {
+				var src = t.srcAttr
+				var dst = t.dstAttr
+				var srcId = t.srcId
+				var dstId = t.dstId
+				if (src.levels(i) < dst.levels(i)) {
+					src = t.dstAttr
+					dst = t.srcAttr
+
+					dstId = t.srcId
+					srcId = t.dstId
+				}
+				print("pass")
+				
+			})
+		}
+		triplet.srcAttr.isLeaf = false
+		triplet.srcAttr*/
+		t.srcAttr.isLeaf = false
+		(t.srcId,t.srcAttr)
+	})
+	
+	/*
+	 * Modify this part. And add the map for the isLeaf and handle it in the rest of the code. Make sure to set isLeaf to false properly
+	 */
+	var newVs2 = newGraph.triplets.map(t=>{
+		t.dstAttr.isLeaf = false
+		(t.dstId,t.dstAttr)
+	})
+	newVs = newVs.union(newVs2)
+	newVs = newVs.distinct
+	newGraph = Graph(newVs, newGraph.edges).cache
+	
+	//newGraph.mapReduceTriplets(mapFunc, reduceFunc, activeSetOpt)
+	println("new graph\n" + newGraph.vertices.collect.mkString("\n"))
+	println("maxLevels\n" + maxLevels.mkString("\n"))
+	/*newGraph = newGraph.pregel(msg)(
+		(vid, vertex, message) => {
+			println("vid=" + vid + " node=" + vertex + "; received msg: " + message + "; maxLevels=" + maxLevels)
+			var vdata = new VertexData(0, true)
+			vdata.levels = vertex.levels
+			vdata.shortestPaths = vertex.shortestPaths
+			vdata.credits = vertex.credits
+			message.messages.foreach(msg => {
+				if (msg.messageId == -1) {
+					msg.roots.foreach(i => {
+						var creditVal = Double.PositiveInfinity
+						if (vdata.levels(i) == maxLevels(i))
+							creditVal = 1
+						vdata.credits += (i -> creditVal)
+						vdata.levels = vertex.levels
+						vdata.shortestPaths = vertex.shortestPaths
+
+					})
+				}
+				else {
+					//println("msgid="+msg.messageId+"; msg.shortestPathCount="+msg.shortestPathCount+"; vdata.shortestPaths="+vdata.shortestPaths)
+					vdata.credits(msg.messageId) = msg.credit
+				}
+			})
+
+			vdata
+
+		}, // Vertex Program
+		triplet => { // Send Message 
+			//println("triplets:" + triplet)
+			var resultList: List[(VertexId, Message)] = List[(VertexId, Message)]()
+			var roots = triplet.srcAttr.levels;
+			if (roots.size <= 0) {
+				roots = triplet.dstAttr.levels;
+			}
+			if (roots.size > 0) {
+
+				//println("roots exist")
+
+				roots.keys.foreach(i => {
+					var src = triplet.srcAttr
+					var dst = triplet.dstAttr
+					var srcId = triplet.srcId
+					var dstId = triplet.dstId
+					if (src.levels(i) < dst.levels(i)) {
+						src = triplet.dstAttr
+						dst = triplet.srcAttr
+
+						dstId = triplet.srcId
+						srcId = triplet.dstId
+					}
+					var srcLevel = src.levels.getOrElse(i, Double.PositiveInfinity)
+					var dstLevel = dst.levels.getOrElse(i, Double.PositiveInfinity)
+
+					var srcPathesCount = src.shortestPaths.getOrElse(i, 0)
+					var srcCredit = src.credits(i)
+					var dstCredit = dst.credits(i)
+
+					//println("srcLevel="+srcLevel+"; dstLevel="+dstLevel+"; root="+i)
+					if (srcCredit != dstCredit && dstCredit.isPosInfinity) {
+
+						var msg = new Message(i, dstId.toInt, -1, -1, EdgeDirection.Out)
+						msg.credit = srcCredit + 1
+						println("sending msg from src=" + srcId + " (lvl=" + srcLevel + " to dstId=" + dstId + " (lvl=" + dstLevel + "; msg=" + msg)
+						resultList ::= (dstId, msg)
+					}
+				})
+
+			}
+			resultList.iterator
+
+		},
+		(a, b) =>
+			{
+				a.messages ::= b
+				a
+			} // Merge Message
+			)
 	//graph.reverse
+	println(newGraph.vertices.collect.mkString("\n"))*/
 
 	def myPregel[VD: ClassTag, ED: ClassTag, A: ClassTag](grf: Graph[VD, ED],
 		initialMsg: A,

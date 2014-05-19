@@ -10,10 +10,12 @@ class VertexData(paths:Int,isVisited1:Boolean,isVisited2:Boolean,lvl:Int) extend
 	var level:Int = 0
 	var levels:scala.collection.mutable.Map[Int,Double] =  scala.collection.mutable.Map[Int,Double]()
 	var shortestPaths:scala.collection.mutable.Map[Int,Int] =  scala.collection.mutable.Map[Int,Int]()
+	var credits:scala.collection.mutable.Map[Int,Double] =  scala.collection.mutable.Map[Int,Double]()
 	var dlevel:Double = Double.PositiveInfinity
+	var isLeaf:Boolean = true
 	def this(paths:Int) = this(paths,false,false,0)
 	def this(paths:Int,isV:Boolean) = this(paths,isV,false,0)
 	def this(paths:Int,isV:Boolean,l:Int) = this(paths,isV,false,l)
-	override def toString() = "("+shortestPaths+","+isVisitedOnPass1+","+levels+","+isVisitedOnPass2+","+credit+")"
+	override def toString() = "(paths="+shortestPaths+", levels="+levels+", credits="+credits+", isLeaf="+isLeaf+")"
 
 }
