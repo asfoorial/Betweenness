@@ -140,6 +140,7 @@ object BetweennessPregel extends App {
 						resultList ::= (dstId, msg)
 					}
 				})
+
 			}
 
 			resultList.iterator
